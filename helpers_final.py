@@ -3,12 +3,78 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
+
+
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', 50)
 pd.set_option('display.width', 500)
 pd.set_option('display.expand_frame_repr', False)
 pd.set_option('display.float_format', lambda x: '%.5f' % x)
 
+#####################
+### EDA
+#####################
+def check_df(dataframe, head=5):
+    """
+    In order to examine pandas dataframes easily and quickly where we see
+        -shape
+        -dtypes
+        -head
+        -tail
+        -whether null value exist or not
+        -quantiles
+        of the dataframe printed...
+    Parameters
+    ----------
+    dataframe: pandas dataframe
+        Required dataframe to be presented
+    head : int, optional
+        default is 5, enter an integer value for how many rows that is wished to see
+    Returns
+    -------
+        Currently none, Working on requests, will be updated soon
+    Examples
+    ------
+        import pandas as pd
+        import seaborn as sns
+        df = sns.load_dataset("iris")
+        check_df(df)
+    """
+    print("##################### Shape #####################")
+    print(dataframe.shape)
+    print("##################### Info #####################")
+    print(dataframe.info())
+    print("##################### Types #####################")
+    print(dataframe.dtypes)
+    print("##################### Head #####################")
+    print(dataframe.head(head))
+    print("##################### Tail #####################")
+    print(dataframe.tail(head))
+    print("##################### NA #####################")
+    print(dataframe.isnull().sum())
+    print("##################### Describe #####################")
+    print(dataframe.describe().T)
+    print("##################### Value_counts #####################")
+    for col in dataframe.columns:
+        print(dataframe[col].value_counts())
+    print("##################### Quantiles #####################")
+    print(dataframe.quantile([0, 0.05, 0.50, 0.95, 0.99, 1]).T)
+def missing_values_table(dataframe, na_name=False):
+    na_columns = [col for col in dataframe.columns if dataframe[col].isnull().sum() > 0]
+    n_miss = dataframe[na_columns].isnull().sum().sort_values(ascending=False)
+    ratio = (dataframe[na_columns].isnull().sum() / dataframe.shape[0] * 100).sort_values(ascending=False)
+    missing_df = pd.concat([n_miss, np.round(ratio, 2)], axis=1, keys=['n_miss', 'ratio'])
+    print(missing_df, end="\n")
+    if na_name:
+        return na_columns
+def missing_vs_target(dataframe, target, na_columns):
+    temp_df = dataframe.copy()
+    for col in na_columns:
+        temp_df[col + '_NA_FLAG'] = np.where(temp_df[col].isnull(), 1, 0)
+    na_flags = temp_df.loc[:, temp_df.columns.str.contains("_NA_")].columns
+    for col in na_flags:
+        print(pd.DataFrame({"TARGET_MEAN": temp_df.groupby(col)[target].mean(),
+                            "Count": temp_df.groupby(col)[target].count()}), end="\n\n\n")
 def grab_col_names(dataframe, cat_th=10, car_th=20, excluded=None):
     """
 
@@ -71,47 +137,91 @@ def grab_col_names(dataframe, cat_th=10, car_th=20, excluded=None):
     # print(f'cat_but_car: {len(cat_but_car)}')
     # print(f'num_but_cat: {len(num_but_cat)}')
     return cat_cols, num_cols, cat_but_car, num_but_cat
-def plot_importance(model, features, num=20, save=False):
-    feature_imp = pd.DataFrame({'Value': model.feature_importances_, 'Feature': features.columns})
-    plt.figure(figsize=(10, 10))
-    sns.set(font_scale=1)
-    feature_imp = feature_imp.sort_values(by="Value", ascending=False).reset_index(drop=True)
-    new_features_importance_order = feature_imp[feature_imp['Feature'].str.contains("NEW_")]
-    feature_imp_print = feature_imp[0:num]
-    new_features_importance_order = new_features_importance_order[0:num]
-    print(feature_imp_print, "\n")
-    print(new_features_importance_order)
+def cat_summary(dataframe, col_name, plot=False):
+    """
+    Provides the value counts and the percentage among themselves for a categorical column of a dataframe and seaborn \
+    plot can be called if wished.
+    Parameters
+    ----------
+    dataframe : pandas dataframe
+        Required dataframe to be presented.
+    col_name : str
+        Required column name of the dataframe
+    plot: bool, optional
+        whether to see Seaborn countplot for the categorical column or not.
 
-    sns.barplot(x="Value", y="Feature", data=feature_imp_print)
-    plt.title('Features')
-    plt.tight_layout()
-    plt.show()
-    if save:
-        plt.savefig('importances.png')
-    res = feature_imp_print['Feature'].values.tolist()
-    return res
+    Returns
+    -------
+        Currently none, Working on requests, will be updated soon
+    Examples
+    ------
+        import pandas as pd
+        import seaborn as sns
+        df = sns.load_dataset("iris")
+        cat_summary(df, "Sex")
+    """
+    import pandas as pd
+    print(pd.DataFrame({col_name: dataframe[col_name].value_counts(),
+                        "Ratio": 100 * dataframe[col_name].value_counts() / len(dataframe)}))
+    print("##########################################")
+    if plot:
+        sns.countplot(x=dataframe[col_name], data=dataframe)
+        plt.show()
+def num_summary(dataframe, numerical_col, plot=False):
+    quantiles = [0.05, 0.10, 0.25, 0.50, 0.75, 0.80, 0.90, 0.95, 0.99]
+    print(dataframe[numerical_col].describe(quantiles).T)
+    if plot:
+        dataframe[numerical_col].hist(bins=30)
+        plt.xlabel(numerical_col)
+        plt.title(numerical_col)
+        plt.show()
+def high_correlated_cols(dataframe, plot=False, corr_th=0.90):
+    """
+
+    Parameters
+    ----------
+    dataframe
+    plot
+    corr_th
+
+    Returns
+    -------
+
+    """
+    import numpy as np
+
+    corr = dataframe.corr()
+    cor_matrix = corr.abs()
+    upper_triangle_matrix = cor_matrix.where(np.triu(np.ones(cor_matrix.shape), k=1).astype(np.bool))
+    drop_list = [col for col in upper_triangle_matrix.columns if any(upper_triangle_matrix[col] > corr_th)]
+    if plot:
+        import seaborn as sns
+        import matplotlib.pyplot as plt
+        sns.set(rc={'figure.figsize': (15, 15)})
+        sns.heatmap(corr, cmap="RdBu")
+        plt.show()
+    return drop_list
 def get_col_desc(name='SK_ID_CURR', col='application_{train|test}.csv'):
     desc_df = pd.read_csv("datasets/home-credit-default-risk/HomeCredit_columns_description.csv", engine='python')
     desc_df.style.set_properties(subset=[name], **{'text-align': 'left'})
     print(desc_df[(desc_df["Table"] == col) & (desc_df["Row"] == name)][["Row", 'Special', 'Description']])
-def rare_analyser(dataframe, target, cat_cols):
-    for col in cat_cols:
-        print(col, ":", len(dataframe[col].value_counts()))
-        print(pd.DataFrame({"COUNT": dataframe[col].value_counts(dropna=False),
-                            "RATIO": dataframe[col].value_counts(dropna=False) / len(dataframe),
-                            "TARGET_MEAN": dataframe.groupby(col)[target].mean()}), end="\n\n\n")
-def rare_encoder(dataframe, rare_perc):
-    temp_df = dataframe.copy()
+def cat_summary_with_target(dataframe, col_name, target, plot=False):
+    sum_df = pd.DataFrame({col_name: dataframe[col_name].value_counts(),
+                        "Ratio": 100 * dataframe[col_name].value_counts() / len(dataframe),
+                        "Target Mean": dataframe.groupby(col_name)[target].mean()})
+    if dataframe[col_name].isnull().sum() > 0:
+        nan_df = pd.DataFrame({col_name: dataframe[col_name].isnull().sum(),
+                               "Ratio": 100 * dataframe[col_name].isnull().sum() / dataframe.shape[0],
+                               "Target Mean": np.nan}, index=[np.nan])
+        sum_df = sum_df.append(nan_df)
+    print(sum_df, end="\n")
 
-    rare_columns = [col for col in temp_df.columns if temp_df[col].dtypes == 'O'
-                    and (temp_df[col].value_counts(dropna=False) / len(temp_df) < rare_perc).any(axis=None)]
-
-    for var in rare_columns:
-        tmp = temp_df[var].value_counts(dropna=False) / len(temp_df)
-        rare_labels = tmp[tmp < rare_perc].index
-        temp_df[var] = np.where(temp_df[var].isin(rare_labels), 'Rare', temp_df[var])
-
-    return temp_df
+    print("##########################################")
+    if plot:
+        sns.countplot(x=dataframe[col_name], data=dataframe)
+        plt.show()
+def target_summary_with_cat(dataframe, target, categorical_col):
+    print(pd.DataFrame({"TARGET_MEAN": dataframe.groupby(categorical_col)[target].mean()}), end="\n\n\n")
 def target_summary_with_cat_extended(dataframe, target, categorical_col):
     """
 
@@ -168,81 +278,93 @@ def target_summary_with_cat_extended(dataframe, target, categorical_col):
     print(pd.DataFrame({"TARGET_MEAN": dataframe.groupby(categorical_col)[target].mean(),
                         "TARGET_CCOUNT": dataframe.groupby(categorical_col)[target].count(),
                         "RATIO": 100 * dataframe[categorical_col].value_counts() / len(dataframe)}), end="\n\n\n")
-def replace_with_thresholds(dataframe, col_name, q1=0.25, q3=0.75):
-    low_limit, up_limit = outlier_thresholds(dataframe, col_name, q1, q3)
-    dataframe.loc[(dataframe[col_name] < low_limit), col_name] = low_limit
-    dataframe.loc[(dataframe[col_name] > up_limit), col_name] = up_limit
-def label_encoder(dataframe, binary_col):
-    labelencoder = LabelEncoder()
-    dataframe[binary_col] = labelencoder.fit_transform(dataframe[binary_col])
-    return dataframe
-def grab_col_names_c(dataframe, cat_th=10, car_th=20, ignore_vars=[]):
-    # excluded columns
-    exc_cols = []
-    if type(ignore_vars) is not list:
-        exc_cols.append(ignore_vars)
-    else:
-        exc_cols.extend(ignore_vars)
-        # for i in ignore_vars:
-        #    exc_cols.append(i)
-    #print(exc_cols)
+def target_summary_with_num(dataframe, target, numerical_col):
+    print(dataframe.groupby(target).agg({numerical_col: ["mean",'min', 'max', 'median']}), end="\n\n\n")
 
-    # cat_cols, cat_but_car
-    cat_cols = [col for col in dataframe.columns if dataframe[col].dtypes == "O"]
 
-    num_but_cat = [col for col in dataframe.columns if dataframe[col].nunique() < cat_th and
-                   dataframe[col].dtypes != "O"]
-
-    cat_but_car = [col for col in dataframe.columns if dataframe[col].nunique() > car_th and
-                   dataframe[col].dtypes == "O"]
-
-    cat_cols = cat_cols + num_but_cat
-    cat_cols = [col for col in cat_cols if col not in cat_but_car and col not in exc_cols]
-
-    # num_cols
-    num_cols = [col for col in dataframe.columns if dataframe[col].dtypes != "O"]
-    num_cols = [col for col in num_cols if col not in num_but_cat and col not in exc_cols]
-
-    # print(f"Observations: {dataframe.shape[0]}")
-    # print(f"Variables: {dataframe.shape[1]}")
-    # print(f'cat_cols: {len(cat_cols)}:', cat_cols)
-    # print(f'num_cols: {len(num_cols)}:', num_cols)
-    # print(f'cat_but_car: {len(cat_but_car)}:', cat_but_car)
-    # print(f'num_but_cat: {len(num_but_cat)}:', num_but_cat)
-    # print(f'excluded_cols: {len(exc_cols)}:', exc_cols)
-    # print("Print >> cat_cols >> num_cols >> cat_but_car >> exc_cols:")
-    return cat_cols, num_cols, cat_but_car, exc_cols
-def one_hot_encoder_c(dataframe, categorical_cols, drop_first=False, nan_as_category=True):
-    dataframe = pd.get_dummies(dataframe, columns=categorical_cols, drop_first=drop_first, dummy_na=nan_as_category)
-    return dataframe
-def outlier_thresholds_c(dataframe, col_name, q1=0.25, q3=0.75):
+#####################
+### PRE-PROCESSING
+#####################
+def replace_with_thresholds(dataframe, col_name, q1=0.05, q3=0.95):
     quartile1 = dataframe[col_name].quantile(q1)
     quartile3 = dataframe[col_name].quantile(q3)
     interquantile_range = quartile3 - quartile1
     up_limit = quartile3 + 1.5 * interquantile_range
     low_limit = quartile1 - 1.5 * interquantile_range
-    return low_limit, up_limit
-def cat_summary_with_target(dataframe, col_name, target, plot=False):
-    sum_df = pd.DataFrame({col_name: dataframe[col_name].value_counts(),
-                        "Ratio": 100 * dataframe[col_name].value_counts() / len(dataframe),
-                        "Target Mean": dataframe.groupby(col_name)[target].mean()})
-    if dataframe[col_name].isnull().sum() > 0:
-        nan_df = pd.DataFrame({col_name: dataframe[col_name].isnull().sum(),
-                               "Ratio": 100 * dataframe[col_name].isnull().sum() / dataframe.shape[0],
-                               "Target Mean": np.nan}, index=[np.nan])
-        sum_df = sum_df.append(nan_df)
-    print(sum_df, end="\n")
+    dataframe.loc[(dataframe[col_name] < low_limit), col_name] = low_limit
+    dataframe.loc[(dataframe[col_name] > up_limit), col_name] = up_limit
+    return dataframe
+def check_outlier(dataframe, col_name, q1=0.05, q3=0.95):
+    quartile1 = dataframe[col_name].quantile(q1)
+    quartile3 = dataframe[col_name].quantile(q3)
+    interquantile_range = quartile3 - quartile1
+    up_limit = quartile3 + 1.5 * interquantile_range
+    low_limit = quartile1 - 1.5 * interquantile_range
+    out_count = dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].shape[0]
+    out = dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].any(axis=None)
+    if out:
+        print(col_name, " has ", out_count, "outliers !")
+        return col_name
+    else:
+        return False
+def rare_analyser(dataframe, target, cat_cols):
+    for col in cat_cols:
+        print(col, ":", len(dataframe[col].value_counts()))
+        print(pd.DataFrame({"COUNT": dataframe[col].value_counts(dropna=False),
+                            "RATIO": dataframe[col].value_counts(dropna=False) / len(dataframe),
+                            "TARGET_MEAN": dataframe.groupby(col)[target].mean()}), end="\n\n\n")
+def rare_encoder(dataframe, rare_perc):
+    temp_df = dataframe.copy()
 
-    print("##########################################")
-    if plot:
-        sns.countplot(x=dataframe[col_name], data=dataframe)
-        plt.show()
-def one_hot_encoder_z(df, nan_as_category=True):
-    original_columns = list(df.columns)
-    categorical_columns = [col for col in df.columns if df[col].dtype == 'object']
-    df = pd.get_dummies(df, columns=categorical_columns, dummy_na=nan_as_category)
-    new_columns = [c for c in df.columns if c not in original_columns]
-    return df, new_columns
+    rare_columns = [col for col in temp_df.columns if temp_df[col].dtypes == 'O'
+                    and (temp_df[col].value_counts(dropna=False) / len(temp_df) < rare_perc).any(axis=None)]
+
+    for var in rare_columns:
+        tmp = temp_df[var].value_counts(dropna=False) / len(temp_df)
+        rare_labels = tmp[tmp < rare_perc].index
+        temp_df[var] = np.where(temp_df[var].isin(rare_labels), 'Rare', temp_df[var])
+
+    return temp_df
+def label_encoder(dataframe, binary_col):
+    labelencoder = LabelEncoder()
+    dataframe[binary_col] = labelencoder.fit_transform(dataframe[binary_col])
+    return dataframe
+def one_hot_encoder(dataframe, categorical_cols, drop_first=False, nan_as_category=True):
+    dataframe = pd.get_dummies(dataframe, columns=categorical_cols, drop_first=drop_first, dummy_na=nan_as_category)
+    return dataframe
+#####################
+### MODEL PERFORMANCE
+#####################
+def plot_importance(model, features, num=20, save=False):
+    feature_imp = pd.DataFrame({'Value': model.feature_importances_, 'Feature': features.columns})
+    plt.figure(figsize=(10, 10))
+    sns.set(font_scale=1)
+    feature_imp = feature_imp.sort_values(by="Value", ascending=False).reset_index(drop=True)
+    new_features_importance_order = feature_imp[feature_imp['Feature'].str.contains("NEW_")]
+    feature_imp_print = feature_imp[0:num]
+    new_features_importance_order = new_features_importance_order[0:num]
+    print(feature_imp_print, "\n")
+    print(new_features_importance_order)
+
+    sns.barplot(x="Value", y="Feature", data=feature_imp_print)
+    plt.title('Features')
+    plt.tight_layout()
+    plt.show()
+    if save:
+        plt.savefig('importances.png')
+    res = feature_imp_print['Feature'].values.tolist()
+    return res
+def plot_importance2(model, features, num=20, save=False):
+    feature_imp = pd.DataFrame({'Value': model.feature_importances_, 'Feature': features.columns})
+    plt.figure(figsize=(10, 10))
+    sns.set(font_scale=1)
+    sns.barplot(x="Value", y="Feature", data=feature_imp.sort_values(by="Value",
+                                                                     ascending=False)[0:num])
+    plt.title('Features')
+    plt.tight_layout()
+    plt.show()
+    if save:
+        plt.savefig('importances.png')
 def train_val(y_train, y_train_pred, y_test, y_pred):
     scores = {"train_set": {"Accuracy" : accuracy_score(y_train, y_train_pred),
                             "Precision" : precision_score(y_train, y_train_pred),
@@ -253,285 +375,9 @@ def train_val(y_train, y_train_pred, y_test, y_pred):
                            "Recall" : recall_score(y_test, y_pred),
                            "f1" : f1_score(y_test, y_pred)}}
     return pd.DataFrame(scores)
-
-
-"""from EDA_sem import check_df, create_rfm, cat_summary,grab_col_names,high_correlated_cols,num_summary,target_summary_with_cat,target_summary_with_num,create_cltv_c, create_cltv_p"""
-#funtionlist:
-#check_df, cat_summary,grab_col_names,high_correlated_cols,num_summary,target_summary_with_cat,target_summary_with_num,create_rfm, create_cltv_c, create_cltv_p
-#check_df   -->In order to examine pandas dataframes easily and quickly
-#cat_summary  --> Provides the value counts and the percentage categorical columns of
-# grab_col_names  --> Veri setindeki kategorik, numerik ve kategorik fakat kardinal değişkenlerin isimlerini verir.
-# high_correlated_cols  --> Dataframedeki yuksek corele olan colonlarin (Drop edilebilecekler yani) getirir.
-# num_summary  --> Numerical colonlarin ozeti
-# target_summary_with_cat  -->Hedef Değişkenin Kategorik Değişkenler ile Analizi
-# target_summary_with_num  -->Hedef Değişkenin Sayısal Değişkenler ile Analizi
-#create_rfm --> crateas an rfm from a dataframe. Recency-Frequency-Monetary scripti
-#create_cltv_c --> Customer lifetime value scripti
-#create_cltv_p --> CLTV sctipri probabiltiy ile beraber, ne kadar gelir getirir onumuzdeki 3ay vs.
-
-
-
-from sklearn.preprocessing import LabelEncoder
-
-def check_df(dataframe, head=5):
-    """
-    In order to examine pandas dataframes easily and quickly where we see
-        -shape
-        -dtypes
-        -head
-        -tail
-        -whether null value exist or not
-        -quantiles
-        of the dataframe printed...
-    Parameters
-    ----------
-    dataframe: pandas dataframe
-        Required dataframe to be presented
-    head : int, optional
-        default is 5, enter an integer value for how many rows that is wished to see
-    Returns
-    -------
-        Currently none, Working on requests, will be updated soon
-    Examples
-    ------
-        import pandas as pd
-        import seaborn as sns
-        df = sns.load_dataset("iris")
-        check_df(df)
-    """
-    print("##################### Shape #####################")
-    print(dataframe.shape)
-    print("##################### Info #####################")
-    print(dataframe.info())
-    print("##################### Types #####################")
-    print(dataframe.dtypes)
-    print("##################### Head #####################")
-    print(dataframe.head(head))
-    print("##################### Tail #####################")
-    print(dataframe.tail(head))
-    print("##################### NA #####################")
-    print(dataframe.isnull().sum())
-    print("##################### Describe #####################")
-    print(dataframe.describe().T)
-    print("##################### Value_counts #####################")
-    for col in dataframe.columns:
-        print(dataframe[col].value_counts())
-    print("##################### Quantiles #####################")
-    print(dataframe.quantile([0, 0.05, 0.50, 0.95, 0.99, 1]).T)
-def cat_summary(dataframe, col_name, plot=False):
-    """
-    Provides the value counts and the percentage among themselves for a categorical column of a dataframe and seaborn \
-    plot can be called if wished.
-    Parameters
-    ----------
-    dataframe : pandas dataframe
-        Required dataframe to be presented.
-    col_name : str
-        Required column name of the dataframe
-    plot: bool, optional
-        whether to see Seaborn countplot for the categorical column or not.
-
-    Returns
-    -------
-        Currently none, Working on requests, will be updated soon
-    Examples
-    ------
-        import pandas as pd
-        import seaborn as sns
-        df = sns.load_dataset("iris")
-        cat_summary(df, "Sex")
-    """
-    import pandas as pd
-    print(pd.DataFrame({col_name: dataframe[col_name].value_counts(),
-                        "Ratio": 100 * dataframe[col_name].value_counts() / len(dataframe)}))
-    print("##########################################")
-    if plot:
-        sns.countplot(x=dataframe[col_name], data=dataframe)
-        plt.show()
-def num_summary(dataframe, numerical_col, plot=False):
-    quantiles = [0.05, 0.10, 0.25, 0.50, 0.75, 0.80, 0.90, 0.95, 0.99]
-    print(dataframe[numerical_col].describe(quantiles).T)
-    if plot:
-        dataframe[numerical_col].hist(bins=30)
-        plt.xlabel(numerical_col)
-        plt.title(numerical_col)
-        plt.show()
-
-# Hedef Değişkenin Kategorik Değişkenler ile Analizi
-def target_summary_with_cat(dataframe, target, categorical_col):
-    print(pd.DataFrame({"TARGET_MEAN": dataframe.groupby(categorical_col)[target].mean()}), end="\n\n\n")
-
-def target_summary_with_cat_extended(dataframe, target, categorical_col):
-    """
-
-        Veri setindeki Target colonunu, girilen kategorik colona gore gruplayip
-            - mean
-            - count
-            - ratio
-        sonuclarini ekrana yazdirir.
-
-        Parameters
-        ------
-            dataframe: dataframe
-                    Target ve Kategorik kolonlarin bulundugu dataframe
-            target: str
-                    Sonucun getirilecegi hedef degisken
-            categorical_col: str
-                    Gruplanmak istenen kategorik kolon
-
-        Returns
-        ------
-            None
-
-        Examples
-        ------
-            import pandas as pd
-            in:
-            df = pd.DataFrame({'Animal': ['Falcon', 'Falcon', 'Falcon',
-                                          'Parrot', 'Parrot'],
-                               'Max Speed': [310, 330, 340, 24, 28]})
-
-            in:
-            df
-            out:
-              Animal   Max Speed
-            0  Falcon  310
-            1  Falcon  330
-            2  Falcon  340
-            3  Parrot   24
-            4  Parrot   28
-
-            in: target_summary_with_cat_extended(df, 'Max Speed', 'Animal')
-            out:
-                    TARGET_MEAN  TARGET_CCOUNT  RATIO
-            Animal
-            Falcon 326.6667      3             60.0000
-            Parrot  26.0000      2             40.0000
-
-        Notes
-        ------
-            None
-
-        """
-# Hedef Değişkenin Sayısal Değişkenler ile Analizi
-def target_summary_with_num(dataframe, target, numerical_col):
-    print(dataframe.groupby(target).agg({numerical_col: "mean"}), end="\n\n\n")
-# 5. Korelasyon Analizi (Analysis of Correlation)
-def high_correlated_cols(dataframe, plot=False, corr_th=0.90):
-    """
-
-    Parameters
-    ----------
-    dataframe
-    plot
-    corr_th
-
-    Returns
-    -------
-
-    """
-    import numpy as np
-
-    corr = dataframe.corr()
-    cor_matrix = corr.abs()
-    upper_triangle_matrix = cor_matrix.where(np.triu(np.ones(cor_matrix.shape), k=1).astype(np.bool))
-    drop_list = [col for col in upper_triangle_matrix.columns if any(upper_triangle_matrix[col] > corr_th)]
-    if plot:
-        import seaborn as sns
-        import matplotlib.pyplot as plt
-        sns.set(rc={'figure.figsize': (15, 15)})
-        sns.heatmap(corr, cmap="RdBu")
-        plt.show()
-    return drop_list
-
-# 6. check outliers
-def check_outlier(dataframe, col_name, q1=0.25, q3=0.75):
-    low_limit, up_limit = outlier_thresholds(dataframe, col_name, q1=q1, q3=q3)
-    out_count = dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].shape[0]
-    out = dataframe[(dataframe[col_name] > up_limit) | (dataframe[col_name] < low_limit)].any(axis=None)
-    if out:
-        print(col_name, " has ", out_count, "outliers !")
-        return col_name
-    else:
-        return False
-
-def replace_with_thresholds(dataframe, variable, q1=0.25, q3=0.75):
-    low_limit, up_limit = outlier_thresholds(dataframe, variable, q1=q1, q3=q3)
-    dataframe.loc[(dataframe[variable] < low_limit), variable] = low_limit
-    dataframe.loc[(dataframe[variable] > up_limit), variable] = up_limit
-
-def outlier_thresholds(dataframe, col_name, q1=0.25, q3=0.75):
-    quartile1 = dataframe[col_name].quantile(q1)
-    quartile3 = dataframe[col_name].quantile(q3)
-    interquantile_range = quartile3 - quartile1
-    up_limit = quartile3 + 1.5 * interquantile_range
-    low_limit = quartile1 - 1.5 * interquantile_range
-    return low_limit, up_limit
-
-def missing_values_table(dataframe, na_name=False):
-    na_columns = [col for col in dataframe.columns if dataframe[col].isnull().sum() > 0]
-    n_miss = dataframe[na_columns].isnull().sum().sort_values(ascending=False)
-    ratio = (dataframe[na_columns].isnull().sum() / dataframe.shape[0] * 100).sort_values(ascending=False)
-    missing_df = pd.concat([n_miss, np.round(ratio, 2)], axis=1, keys=['n_miss', 'ratio'])
-    print(missing_df, end="\n")
-    if na_name:
-        return na_columns
-
-def missing_vs_target(dataframe, target, na_columns):
-    temp_df = dataframe.copy()
-    for col in na_columns:
-        temp_df[col + '_NA_FLAG'] = np.where(temp_df[col].isnull(), 1, 0)
-    na_flags = temp_df.loc[:, temp_df.columns.str.contains("_NA_")].columns
-    for col in na_flags:
-        print(pd.DataFrame({"TARGET_MEAN": temp_df.groupby(col)[target].mean(),
-                            "Count": temp_df.groupby(col)[target].count()}), end="\n\n\n")
-
-def label_encoder(dataframe, binary_col):
-    labelencoder = LabelEncoder()
-    dataframe[binary_col] = labelencoder.fit_transform(dataframe[binary_col])
-    return dataframe
-
-def one_hot_encoder(dataframe, categorical_cols, drop_first=False):
-    dataframe = pd.get_dummies(dataframe, columns=categorical_cols, drop_first=drop_first)
-    return dataframe
-
-def rare_analyser(dataframe, target, cat_cols):
-    for col in cat_cols:
-        print(col, ":", len(dataframe[col].value_counts()))
-        print(pd.DataFrame({"COUNT": dataframe[col].value_counts(),
-                            "RATIO": dataframe[col].value_counts() / len(dataframe),
-                            "TARGET_MEAN": dataframe.groupby(col)[target].mean()}), end="\n\n\n")
-
-def rare_encoder(dataframe, rare_perc):
-    temp_df = dataframe.copy()
-
-    rare_columns = [col for col in temp_df.columns if temp_df[col].dtypes == 'O'
-                    and (temp_df[col].value_counts() / len(temp_df) < rare_perc).any(axis=None)]
-
-    for var in rare_columns:
-        tmp = temp_df[var].value_counts() / len(temp_df)
-        rare_labels = tmp[tmp < rare_perc].index
-        temp_df[var] = np.where(temp_df[var].isin(rare_labels), 'Rare', temp_df[var])
-
-    return temp_df
-
-#Feature importance plotu cizer.
-# def plot_importance(model, features, num=len(X), save=False):
-#     feature_imp = pd.DataFrame({'Value': model.feature_importances_, 'Feature': features.columns})
-#     plt.figure(figsize=(10, 10))
-#     sns.set(font_scale=1)
-#     sns.barplot(x="Value", y="Feature", data=feature_imp.sort_values(by="Value",
-#                                                                      ascending=False)[0:num])
-#     plt.title('Features')
-#     plt.tight_layout()
-#     plt.show()
-#     if save:
-#         plt.savefig('importances.png')
-#plot_importance(cart_final, X)
-
 # ogrenme egrisinin plotunu cizer.
 def val_curve_params(model, X, y, param_name, param_range, scoring="roc_auc", cv=10):
-
+    # val_curve_params(cart_model, X, y, "max_depth", range(1, 11)
     train_score, test_score = validation_curve(
         model, X=X, y=y, param_name=param_name, param_range=param_range, scoring=scoring, cv=cv)
 
@@ -550,7 +396,14 @@ def val_curve_params(model, X, y, param_name, param_range, scoring="roc_auc", cv
     plt.tight_layout()
     plt.legend(loc='best')
     plt.show()
-#val_curve_params(cart_model, X, y, "max_depth", range(1, 11))
+
+
+
+
+
+
+
+
 
 #Visualizing the Decision Tree
 def tree_graph_to_png(tree, feature_names, png_file_to_save):
