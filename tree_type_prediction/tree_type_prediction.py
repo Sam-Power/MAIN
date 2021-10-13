@@ -62,6 +62,7 @@ def timer(title):
     yield
     print("{} - finished in {:.0f}s".format(title, time.time() - t0))
 
+
 def run_eda():
     # df = pd.read_csv('tree_type_prediction/dataset/covtype.csv')
     # df
@@ -128,6 +129,7 @@ def run_eda():
     scaler = MinMaxScaler()
     #df[col_sca] = scaler.fit_transform(df[col_sca])
 
+
 def model_base():
     ######################################
     # 9. Modeling
@@ -174,6 +176,7 @@ def model_base():
     y_pred = model_rf.predict(X_test)
     print(classification_report(y_test, y_pred))
 
+
 def run_pycaret():
     ######################################
     # pycaret optuna
@@ -206,6 +209,7 @@ def run_pycaret():
     #                        n_jobs=-1, oob_score=False, random_state=123, verbose=0,
     #                        warm_start=False)
 
+
 def run_optuna():
     # rf_params = {"max_depth": [5, 15, None],
     #          "max_features": [5, 9, "auto"],
@@ -226,22 +230,30 @@ def run_optuna():
     # FYI: Objective functions can take additional arguments
     # (https://optuna.readthedocs.io/en/stable/faq.html#objective-func-additional-args).
     def objective(trial):
-        # data, target = sklearn.datasets.load_breast_cancer(return_X_y=True)
         dataset = df.copy()
-        # dataset = dataset[dataset['Cover'] < 600000]
 
         data = dataset.drop(['Cover_Type'], axis=1)
         target = dataset['Cover_Type']
 
-        train_x, valid_x, train_y, valid_y = train_test_split(data, target, test_size=0.25)
-        dtrain = lgb.Dataset(train_x, label=train_y)
+        X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.20)
+        X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25)
 
-        param = {
+        dtrain = lgb.Dataset(X_train, label=y_train)
+        dvalid = lgb.Dataset(X_valid, label=y_valid, reference=dtrain)
+        dtest = lgb.Dataset(X_test)
+
+
+        params = {
+            'num_class': 8, ## We have 7 tree types...
             #"objective": "regression",
-            "objective": "classification",
-            "metric": 'f1_macro',
+            #"objective": "binary",
+            "objective": "multiclass",
+            #"metric": 'f1_macro',
+            #"metric": 'multi_error',
+            "metric": 'multi_logloss',
             "verbosity": -1,
             "boosting_type": "gbdt",
+            #"boosting_type": "rf",
             "lambda_l1": trial.suggest_float("lambda_l1", 1e-8, 10.0, log=True),
             "lambda_l2": trial.suggest_float("lambda_l2", 1e-8, 10.0, log=True),
             "num_leaves": trial.suggest_int("num_leaves", 2, 256),
@@ -253,12 +265,23 @@ def run_optuna():
             "max_depth": trial.suggest_int("max_depth", 1, 110),
             "num_leaves": trial.suggest_int("num_leaves", 31, 128),
         }
+        pruning_callback = optuna.integration.LightGBMPruningCallback(trial,
+                                                                      "multi_logloss")
+        model = lgb.train(params, dtrain,
+                          num_boost_round=1000,
+                          early_stopping_rounds=30,
+                          valid_sets=dvalid,
+                          callbacks=[pruning_callback]
+                          )
+        vd_preds = model.predict(X_test, num_iteration=model.best_iteration)
+        vd_preds = np.argmax(vd_preds, axis=1)  # since its a multiclass we need the most freq. Returns max
 
-        gbm = lgb.train(param, dtrain)
-        preds = gbm.predict(valid_x)
+        accuracy = accuracy_score(y_test, vd_preds)
+        # gbm = lgb.train(param, dtrain)
         # pred_labels = np.rint(preds)
-        rmse = sklearn.metrics.mean_squared_error(valid_y, preds, squared=False)
-        return round(rmse, 2)
+        # rmse = sklearn.metrics.mean_squared_error(valid_y, preds, squared=False)
+        #accuracy = accuracy_score(valid_y, preds)
+        return 1 - round(accuracy, 2) # we need to minimize
 
     if __name__ == "__main__":
         study = optuna.create_study(direction="minimize")
@@ -276,5 +299,101 @@ def run_optuna():
             print("    {}: {}".format(key, value))
 
 
+def run_optuna2():
+    # rf_params = {"max_depth": [5, 15, None],
+    #          "max_features": [5, 9, "auto"],
+    #          "min_samples_split": [6, 8, 15],
+    #          "n_estimators": [150, 200, 300]}
+
+    """
+    Optuna example that optimizes a classifier configuration for cancer dataset using LightGBM.
+    In this example, we optimize the validation accuracy of cancer detection using LightGBM.
+    We optimize both the choice of booster model and their hyperparameters.
+    """
+    import optuna
+    import lightgbm as lgb
+    import sklearn.datasets
+    import sklearn.metrics
+    from sklearn.model_selection import train_test_split
+
+    # FYI: Objective functions can take additional arguments
+    # (https://optuna.readthedocs.io/en/stable/faq.html#objective-func-additional-args).
+    def objective(trial):
+        dataset = df.copy()
+        dataset = dataset.sample(frac=0.02)
+        print(dataset.shape)
+        data = dataset.drop(['Cover_Type'], axis=1)
+        target = dataset['Cover_Type']
+
+        X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.20)
+        # X_train, X_valid, y_train, y_valid = train_test_split(X_train, y_train, test_size=0.25)
+
+        dtrain = lgb.Dataset(X_train, label=y_train)
+        # dvalid = lgb.Dataset(X_valid, label=y_valid, reference=dtrain)
+        # dtest = lgb.Dataset(X_test)
+
+
+        params = {
+            'num_class': 8, ## We have 7 tree types...
+            #"objective": "regression",
+            #"objective": "binary",
+            "objective": "multiclass",
+            #"metric": 'f1_macro',
+            #"metric": 'multi_error',
+            "metric": 'multi_logloss',
+            "verbosity": -1,
+            #"boosting_type": "gbdt",
+            #"boosting_type": "rf",
+            "boosting_type": trial.suggest_categorical("boosting_type", ['gbdt', 'rf']),
+            "lambda_l1": trial.suggest_float("lambda_l1", 1e-8, 10.0, log=True),
+            "lambda_l2": trial.suggest_float("lambda_l2", 1e-8, 10.0, log=True),
+            "num_leaves": trial.suggest_int("num_leaves", 2, 256),
+            "feature_fraction": trial.suggest_float("feature_fraction", 0.4, 1.0),
+            "bagging_fraction": trial.suggest_float("bagging_fraction", 0.4, 1.0),
+            "bagging_freq": trial.suggest_int("bagging_freq", 1, 7),
+            "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
+            "learning_rate": trial.suggest_float("learning_rate", 0.001, 0.1),
+            "max_depth": trial.suggest_int("max_depth", 1, 110),
+            "num_leaves": trial.suggest_int("num_leaves", 31, 128),
+        }
+
+        model = lgb.train(params, dtrain)
+        vd_preds = model.predict(X_test)
+        vd_preds = np.argmax(vd_preds, axis=1)  # since its a multiclass we need the most freq. Returns max
+        accuracy = accuracy_score(y_test, vd_preds)
+        return 1 - round(accuracy, 2) # we need to minimize
+
+    if __name__ == "__main__":
+        study = optuna.create_study(direction="minimize")
+        study.optimize(objective, n_trials=250)
+
+        print("Number of finished trials: {}".format(len(study.trials)))
+
+        print("Best trial:")
+        trial = study.best_trial
+
+        print("  Value: {}".format(trial.value))
+
+        print("  Params: ")
+        for key, value in trial.params.items():
+            print("    {}: {}".format(key, value))
+
 run_eda()
-run_optuna()
+# run_optuna()
+# Did not meet early stopping. Best iteration is:
+# [1000]	valid_0's multi_logloss: 0.129006
+run_optuna2()
+# Number of finished trials: 250
+# Best trial:
+#   Value: 0.16000000000000003
+#   Params:
+#     boosting_type: gbdt
+#     lambda_l1: 0.0004211098752917722
+#     lambda_l2: 0.13530363616096244
+#     num_leaves: 172
+#     feature_fraction: 0.9213431314674705
+#     bagging_fraction: 0.9500933410784056
+#     bagging_freq: 2
+#     min_child_samples: 13
+#     learning_rate: 0.053679860437304376
+#     max_depth: 39
