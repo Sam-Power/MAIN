@@ -408,10 +408,9 @@ def run_optuna_cat2(df):
         #           'boosting_type': 'Plain',
         #           'bootstrap_type': 'MVS'}
         param = {
-                    "iterations": trial.suggest_int("iterations", 500, 1000),
+                    "iterations": trial.suggest_int("iterations", 500, 1200),
                     'l2_leaf_reg': trial.suggest_int("l2_leaf_reg", 1, 100),
                     'border_count': trial.suggest_int("border_count", 5, 200),
-                    'ctr_border_count': trial.suggest_int("ctr_border_count", 5, 200),
                     # "iterations": trial.suggest_int("iterations", 50,101),
                     # "learning_rate": trial.suggest_float("learning_rate", 0.05, 0.15),
                     # "depth": trial.suggest_int("depth", 5, 9),
@@ -423,7 +422,7 @@ def run_optuna_cat2(df):
                 }
 
 
-        model = CatBoostClassifier(eval_metric = 'auc',
+        model = CatBoostClassifier(eval_metric = 'AUC',
                                    verbose=0,
                                    learning_rate=0.09153154807802073,
                                    depth=7,
@@ -480,6 +479,36 @@ def run_model_base_CAT_tuned(df):
     test_df['target'] = y_prob_sub
     test_df[['id', 'target']].to_csv('submission_catTuned.csv', index=False)
 # 0.85530
+def run_model_base_CAT_tuned2(df):
+    train_df = df[df['target'].notnull()]
+    test_df = df[df['target'].isnull()]
+
+    y = train_df["target"]
+    X = train_df.drop(["id", "target"], axis=1)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=1)
+
+    params = {'iterations': 646,
+              'l2_leaf_reg': 20,
+              'border_count': 88,
+              'learning_rate': 0.09153154807802073,
+              'depth': 7,
+              'objective': 'CrossEntropy',
+              'colsample_bylevel': 0.0829041193408479,
+              'boosting_type': 'Plain',
+              'bootstrap_type': 'MVS'}
+
+    y_train = y_train.astype(float)
+    model = CatBoostClassifier(random_state=1, **params).fit(X_train, y_train)
+    y_prob = model.predict_proba(X_test)[:, 1]
+    y_test = y_test.astype(float)
+    print("roc_auc_score: ", round(roc_auc_score(y_test, y_prob), 4))
+
+    y = y.astype(float)
+    model = CatBoostClassifier(random_state=1, **params).fit(X, y)
+    sub_x = test_df.drop(["id", "target"], axis=1)
+    y_prob_sub = model.predict_proba(sub_x)[:, 1]
+    test_df['target'] = y_prob_sub
+    test_df[['id', 'target']].to_csv('submission_catTuned2.csv', index=False)
 
 def voting_1(df):
     train_df = df[df['target'].notnull()]
@@ -726,14 +755,13 @@ with timer("read pkl"):
         df = pickle.load(input_file)  # 3 seconds
 train_df = df[df['target'].notnull()]
 test_df = df[df['target'].isnull()]
-#dfx = train_df.sample(frac=0.01)
+dfx = train_df.sample(frac=0.01)
 # with timer('gogo'):
 #     run_model_search(dfx)
 # with timer('gogo'):
 #     run_optuna_cat(dfx)
-
 with timer('run_optuna_cat2'):
-    run_optuna_cat2(df)
-
-
+    run_optuna_cat2(dfx)
+with timer('run_optuna_cat2'):
+    run_model_base_CAT_tuned2(df)
 
