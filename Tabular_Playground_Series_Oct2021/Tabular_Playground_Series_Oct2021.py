@@ -449,7 +449,125 @@ def run_optuna_cat2(df):
 
         print("  Params: ")
         for key, value in trial.params.items():
+            print("    {}: {}".format(key, value))def run_optuna_cat2(df):
+    def objective(trial):
+        dataset = df.copy()
+        data = dataset.drop(['target'], axis=1)
+        target = dataset['target']
+        target = target.astype(float)
+        del dataset
+        gc.collect()
+
+        X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.30)
+        del data, target
+        gc.collect()
+
+        #dtrain = lgb.Dataset(X_train, label=y_train)
+        # paramsTunedAt1 = {'iterations': 1000,
+        #           'learning_rate': 0.09153154807802073,
+        #           'depth': 7,
+        #           'objective': 'CrossEntropy',
+        #           'colsample_bylevel': 0.0829041193408479,
+        #           'boosting_type': 'Plain',
+        #           'bootstrap_type': 'MVS'}
+        param = {
+                    "iterations": trial.suggest_int("iterations", 500, 1200),
+                    'l2_leaf_reg': trial.suggest_int("l2_leaf_reg", 1, 100),
+                    'border_count': trial.suggest_int("border_count", 5, 200),
+                    # "iterations": trial.suggest_int("iterations", 50,101),
+                    # "learning_rate": trial.suggest_float("learning_rate", 0.05, 0.15),
+                    # "depth": trial.suggest_int("depth", 5, 9),
+                    #"objective": trial.suggest_categorical("objective", ["Logloss", "CrossEntropy"]),
+                    #"colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
+                    #"boosting_type": trial.suggest_categorical("boosting_type", ["Ordered", "Plain"]),
+                    #"bootstrap_type": trial.suggest_categorical("bootstrap_type", ["Bayesian", "Bernoulli", "MVS"]),
+                    "used_ram_limit": "3gb"
+                }
+
+
+        model = CatBoostClassifier(eval_metric = 'AUC',
+                                   verbose=0,
+                                   learning_rate=0.09153154807802073,
+                                   depth=7,
+                                   objective='CrossEntropy',
+                                   colsample_bylevel=0.0829041193408479,
+                                   boosting_type='Plain',
+                                   bootstrap_type='MVS' ,
+                                   **param).fit(X_train, y_train)
+        y_prob = model.predict_proba(X_test)[:, 1]
+
+        roc_score = round(roc_auc_score(y_test, y_prob), 4)
+        return 1 - roc_score  # we need to minimize
+
+    if __name__ == "__main__":
+        study = optuna.create_study(direction="minimize")
+        study.optimize(objective, n_trials=250)
+
+        print("Number of finished trials: {}".format(len(study.trials)))
+
+        print("Best trial:")
+        trial = study.best_trial
+
+        print("  Value: {}".format(trial.value))
+
+        print("  Params: ")
+        for key, value in trial.params.items():
             print("    {}: {}".format(key, value))
+def run_optuna_cat3(df):
+    def objective(trial):
+        dataset = df.copy()
+        data = dataset.drop(['target'], axis=1)
+        target = dataset['target']
+        target = target.astype(float)
+        del dataset
+        gc.collect()
+
+        X_train, X_test, y_train, y_test = train_test_split(data, target, test_size=0.30)
+        del data, target
+        gc.collect()
+
+        param = {
+                    "iterations": trial.suggest_int("iterations", 500, 1200),
+                    'l2_leaf_reg': trial.suggest_int("l2_leaf_reg", 1, 100),
+                    'border_count': trial.suggest_int("border_count", 1, 255),
+                    "learning_rate": trial.suggest_float("learning_rate", 0.05, 0.15),
+                    "depth": trial.suggest_int("depth", 3, 9),
+                    "objective": trial.suggest_categorical("objective", ["Logloss", "CrossEntropy"]),
+                    "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.01, 0.1),
+                    "boosting_type": trial.suggest_categorical("boosting_type", ["Ordered", "Plain"]),
+                    "bootstrap_type": trial.suggest_categorical("bootstrap_type", ["Bayesian", "Bernoulli", "MVS"]),
+
+                    "random_strength": trial.suggest_loguniform("random_strength",1e-9, 10),
+                    "bagging_temperature": trial.suggest_float("bagging_temperature",0, 1),
+                    "scale_pos_weight": trial.suggest_uniform("scale_pos_weight",0.01, 1),
+
+                    "used_ram_limit": "4gb"
+                }
+
+
+        model = CatBoostClassifier(eval_metric = 'AUC',
+                                   verbose=0,
+                                   **param).fit(X_train, y_train)
+        y_prob = model.predict_proba(X_test)[:, 1]
+
+        roc_score = round(roc_auc_score(y_test, y_prob), 4)
+        return 1 - roc_score  # we need to minimize
+
+    if __name__ == "__main__":
+        study = optuna.create_study(direction="minimize")
+        study.optimize(objective, n_trials=250)
+
+        print("Number of finished trials: {}".format(len(study.trials)))
+
+        print("Best trial:")
+        trial = study.best_trial
+
+        print("  Value: {}".format(trial.value))
+
+        print("  Params: ")
+        for key, value in trial.params.items():
+            print("    {}: {}".format(key, value))
+
 def run_model_base_CAT_tuned(df):
     train_df = df[df['target'].notnull()]
     test_df = df[df['target'].isnull()]
@@ -509,6 +627,38 @@ def run_model_base_CAT_tuned2(df):
     y_prob_sub = model.predict_proba(sub_x)[:, 1]
     test_df['target'] = y_prob_sub
     test_df[['id', 'target']].to_csv('submission_catTuned2.csv', index=False)
+# 0.85522
+def run_model_base_CAT_tuned3(df):
+    train_df = df[df['target'].notnull()]
+    test_df = df[df['target'].isnull()]
+
+    y = train_df["target"]
+    X = train_df.drop(["id", "target"], axis=1)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=1)
+
+    params = {'iterations': 1000,
+              'l2_leaf_reg': 20,
+              'border_count': 88,
+              'learning_rate': 0.09153154807802073,
+              'depth': 7,
+              'objective': 'CrossEntropy',
+              'colsample_bylevel': 0.0829041193408479,
+              'boosting_type': 'Plain',
+              'bootstrap_type': 'MVS'}
+
+    # y_train = y_train.astype(float)
+    # model = CatBoostClassifier(random_state=1, **params).fit(X_train, y_train)
+    # y_prob = model.predict_proba(X_test)[:, 1]
+    # y_test = y_test.astype(float)
+    # print("roc_auc_score: ", round(roc_auc_score(y_test, y_prob), 4))
+
+    y = y.astype(float)
+    model = CatBoostClassifier(eval_metric = 'AUC',random_state=1, **params).fit(X, y)
+    sub_x = test_df.drop(["id", "target"], axis=1)
+    y_prob_sub = model.predict_proba(sub_x)[:, 1]
+    test_df['target'] = y_prob_sub
+    test_df[['id', 'target']].to_csv('submission_catTuned3.csv', index=False)
+# 0.85529
 
 def voting_1(df):
     train_df = df[df['target'].notnull()]
@@ -756,14 +906,24 @@ with timer("read pkl"):
 train_df = df[df['target'].notnull()]
 test_df = df[df['target'].isnull()]
 dfx = train_df.sample(frac=0.01)
+
 # with timer('gogo'):
 #     run_model_search(dfx)
 # with timer('gogo'):
 #     run_optuna_cat(dfx)
-with timer('run_optuna_cat2'):
-    run_optuna_cat2(dfx)
-with timer('run_optuna_cat2'):
-    run_model_base_CAT_tuned2(df)
+# with timer('run_optuna_cat2'):
+#     run_optuna_cat2(dfx)
+# with timer('run_model_base_CAT_tuned3'):
+#     run_model_base_CAT_tuned3(df)
+with timer('run_optuna_cat3'):
+    run_optuna_cat2(df)
 
+##############
+##############
+train['std'] = train.std(axis=1)
+train['min'] = train.min(axis=1)
+train['max'] = train.max(axis=1)
 
-
+test['std'] = test.std(axis=1)
+test['min'] = test.min(axis=1)
+test['max'] = test.max(axis=1)
