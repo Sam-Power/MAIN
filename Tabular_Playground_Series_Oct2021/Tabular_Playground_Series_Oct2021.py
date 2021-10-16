@@ -535,7 +535,7 @@ def run_model_base_CAT_tuned(df):
     sub_x = test_df.drop(["id", "target"], axis=1)
     y_prob_sub = model.predict_proba(sub_x)[:, 1]
     test_df['target'] = y_prob_sub
-    test_df[['id', 'target']].to_csv('submission_catTuned.csv', index=False)
+    test_df[['id', 'target']].to_csv('submission_catTunedtrial1.csv', index=False)
 # 0.85530
 def run_model_base_CAT_tuned2(df):
     train_df = df[df['target'].notnull()]
@@ -631,6 +631,52 @@ def run_model_base_CAT_tuned4(df):
     test_df['target'] = y_prob_sub
     test_df[['id', 'target']].to_csv('submission_catTuned4.csv', index=False)
 #0.85502
+def run_model_base_CAT_tunedFinal(df):
+    df['min'] = df[df['target'].notnull()].min(axis=1)
+    df['max'] = df[df['target'].notnull()].max(axis=1)
+    df['std'] = df[df['target'].notnull()].std(axis=1)
+
+    # df['mean'] = df[df['target'].notnull()].mean(axis=1)
+    # df['median'] = df[df['target'].notnull()].median(axis=1)
+    # df['var'] = df[df['target'].notnull()].var(axis=1)
+
+    train_df = df[df['target'].notnull()]
+    test_df = df[df['target'].isnull()]
+
+    y = train_df["target"]
+    X = train_df.drop(["id", "target"], axis=1)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=1)
+
+    params = {'iterations': 1000,
+              'learning_rate': 0.09153154807802073,
+              'depth': 7,
+              'objective': 'CrossEntropy',
+              'colsample_bylevel': 0.0829041193408479,
+              'boosting_type': 'Plain',
+              'bootstrap_type': 'MVS'}
+
+    y_train = y_train.astype(float)
+    model = CatBoostClassifier(random_state=1, **params).fit(X_train, y_train)
+    y_prob = model.predict_proba(X_test)[:, 1]
+    y_test = y_test.astype(float)
+    print("roc_auc_score: ", round(roc_auc_score(y_test, y_prob), 4))
+
+    y = y.astype(float)
+    model = CatBoostClassifier(random_state=1, **params).fit(X, y)
+    sub_x = test_df.drop(["id", "target"], axis=1)
+    y_prob_sub = model.predict_proba(sub_x)[:, 1]
+    test_df['target'] = y_prob_sub
+    test_df[['id', 'target']].to_csv('submission_catTunedtrial1.csv', index=False)
+
+
+    run_model_base_CAT_tuned(df)  # 0.85534
+
+    feature_imp = pd.DataFrame()
+    feature_imp['Features'] = X.columns
+    feature_imp['catboost'] = model.feature_importances_
+    feature_imp = feature_imp.sort_values('catboost', ascending=False
+    feature_imp[feature_imp['catboost'] > 0.1]
+# 0.85534
 def voting_1(df):
     train_df = df[df['target'].notnull()]
     test_df = df[df['target'].isnull()]
@@ -892,10 +938,4 @@ with timer('run_model_base_CAT_tuned4'):
 
 ##############
 ##############
-df['std'] = df[df['target'].notnull()].std(axis=1)
-df['min'] = df[df['target'].notnull()].min(axis=1)
-df['max'] = df[df['target'].notnull()].max(axis=1)
 
-run_model_base_CAT_tuned(df)
-
-#Trial 13 finished with value: 0.14359999999999995 and parameters: {'iterations': 786, 'l2_leaf_reg': 100, 'border_count': 63, 'learning_rate': 0.08896134764498997, 'depth': 8, 'objective': 'Logloss', 'colsample_bylevel': 0.04506508463427829, 'boosting_type': 'Ordered', 'bootstrap_type': 'MVS', 'random_strength': 2.879010566448342e-07}. Best is trial 13 with value: 0.14359999999999995.
