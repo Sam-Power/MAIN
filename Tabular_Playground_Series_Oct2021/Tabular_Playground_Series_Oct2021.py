@@ -599,7 +599,38 @@ def run_model_base_CAT_tuned3(df):
     test_df['target'] = y_prob_sub
     test_df[['id', 'target']].to_csv('submission_catTuned3.csv', index=False)
 # 0.85529
+def run_model_base_CAT_tuned4(df):
+    train_df = df[df['target'].notnull()]
+    test_df = df[df['target'].isnull()]
 
+    y = train_df["target"]
+    X = train_df.drop(["id", "target"], axis=1)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.30, random_state=1)
+
+    params = {'iterations': 786,
+              'l2_leaf_reg': 100,
+              'border_count': 63,
+              'learning_rate': 0.08896134764498997,
+              'depth': 8,
+              'objective': 'Logloss',
+              'colsample_bylevel': 0.04506508463427829,
+              'boosting_type': 'Ordered',
+              'bootstrap_type': 'MVS',
+              'random_strength': 2.879010566448342e-07}
+
+    # y_train = y_train.astype(float)
+    # model = CatBoostClassifier(random_state=1, **params).fit(X_train, y_train)
+    # y_prob = model.predict_proba(X_test)[:, 1]
+    # y_test = y_test.astype(float)
+    # print("roc_auc_score: ", round(roc_auc_score(y_test, y_prob), 4))
+
+    y = y.astype(float)
+    model = CatBoostClassifier(eval_metric = 'AUC',random_state=1, **params).fit(X, y)
+    sub_x = test_df.drop(["id", "target"], axis=1)
+    y_prob_sub = model.predict_proba(sub_x)[:, 1]
+    test_df['target'] = y_prob_sub
+    test_df[['id', 'target']].to_csv('submission_catTuned4.csv', index=False)
+#0.85502
 def voting_1(df):
     train_df = df[df['target'].notnull()]
     test_df = df[df['target'].isnull()]
@@ -843,9 +874,9 @@ def run_kfold_stratified(train, test):
 with timer("read pkl"):
     with open(r"df.pkl", "rb") as input_file:
         df = pickle.load(input_file)  # 3 seconds
-train_df = df[df['target'].notnull()]
-test_df = df[df['target'].isnull()]
-dfx = train_df.sample(frac=0.01)
+# train_df = df[df['target'].notnull()]
+# test_df = df[df['target'].isnull()]
+# dfx = train_df.sample(frac=0.01)
 
 # with timer('gogo'):
 #     run_model_search(dfx)
@@ -854,17 +885,17 @@ dfx = train_df.sample(frac=0.01)
 # with timer('run_optuna_cat2'):
 #     run_opwith timer('run_optuna_cat3'):
 #     run_optuna_cat3(train_df)tuna_cat2(dfx)
-# with timer('run_model_base_CAT_tuned3'):
-#     run_model_base_CAT_tuned3(df)
-with timer('run_optuna_cat3'):
-    run_optuna_cat3(train_df)
+with timer('run_model_base_CAT_tuned4'):
+    run_model_base_CAT_tuned4(df)
+# with timer('run_optuna_cat3'):
+#     run_optuna_cat3(train_df)
 
 ##############
 ##############
-train['std'] = train.std(axis=1)
-train['min'] = train.min(axis=1)
-train['max'] = train.max(axis=1)
+df['std'] = df[df['target'].notnull()].std(axis=1)
+df['min'] = df[df['target'].notnull()].min(axis=1)
+df['max'] = df[df['target'].notnull()].max(axis=1)
 
-test['std'] = test.std(axis=1)
-test['min'] = test.min(axis=1)
-test['max'] = test.max(axis=1)
+run_model_base_CAT_tuned(df)
+
+#Trial 13 finished with value: 0.14359999999999995 and parameters: {'iterations': 786, 'l2_leaf_reg': 100, 'border_count': 63, 'learning_rate': 0.08896134764498997, 'depth': 8, 'objective': 'Logloss', 'colsample_bylevel': 0.04506508463427829, 'boosting_type': 'Ordered', 'bootstrap_type': 'MVS', 'random_strength': 2.879010566448342e-07}. Best is trial 13 with value: 0.14359999999999995.
