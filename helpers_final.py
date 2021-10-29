@@ -1037,3 +1037,66 @@ def weighted_feature_importance(model1, model2, model3, X, plot=False):
         plt.show()
 
     return feature_imp
+
+def catboost_all_params():
+    from catboost import CatBoostClassifier, CatBoostRegressor
+    import random
+    import numpy as np
+
+    # Create fake dataset for testing:
+    random.seed(42)
+    X = np.array([random.random() for x in range(1000)])
+    y = X ** 2 + random.random()
+    y_class = [1 if x > 1 else 0 for x in y]
+
+    cbc = CatBoostClassifier()
+    cbc.fit(X, y_class, verbose=False)
+    cbr = CatBoostRegressor()
+    cbr.fit(X, y_class, verbose=False)
+    print ("Catboost REgressor ")
+    print (cbr.get_all_params())
+    print("-" *  99)
+    print("Catboost Classifier ")
+    print(cbr.get_all_params())
+
+def undummify(df, prefix_sep="_"):
+    # >>> df
+    #      a    b    c
+    # 0  A_1  B_1  C_1
+    # 1  A_2  B_2  C_2
+    # >>> df2 = pd.get_dummies(df)
+    # >>> df2
+    #    a_A_1  a_A_2  b_B_1  b_B_2  c_C_1  c_C_2
+    # 0      1      0      1      0      1      0
+    # 1      0      1      0      1      0      1
+    # >>> df3 = undummify(df2)
+    # >>> df3
+    #      a    b    c
+    # 0  A_1  B_1  C_1
+    # 1  A_2  B_2  C_2
+    cols2collapse = {
+        item.split(prefix_sep)[0]: (prefix_sep in item) for item in df.columns
+    }
+    series_list = []
+    for col, needs_to_collapse in cols2collapse.items():
+        if needs_to_collapse:
+            undummified = (
+                df.filter(like=col)
+                .idxmax(axis=1)
+                .apply(lambda x: x.split(prefix_sep, maxsplit=1)[1])
+                .rename(col)
+            )
+            series_list.append(undummified)
+        else:
+            series_list.append(df[col])
+    undummified_df = pd.concat(series_list, axis=1)
+    return undummified_df
+
+
+# apply lambda and transform
+# df[na_cols_cat] = df[na_cols_cat].apply(lambda x: x.fillna(x.mode()), axis=0)
+
+# Bir dataframei groupladigimizda istedigimiz kolonuun minimum olan satirini bu sekilde cagirabiliriz.
+# Bunun avantaji diger kolonlarin depsi sadece bu grupladigimizdan sonraki sectigimiz kolonuun minimum olan satirini secer
+# d.loc[d.index.intersection(d.groupby(cols,dropna=False)[“datediff”].idxmin(skipna=False)),:]
+
