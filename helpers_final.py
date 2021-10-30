@@ -1095,6 +1095,8 @@ def undummify(df, prefix_sep="_"):
 
 # apply lambda and transform
 # df[na_cols_cat] = df[na_cols_cat].apply(lambda x: x.fillna(x.mode()), axis=0)
+# df['filled_weight'] = df.groupby(['gender','age_cohort'])['weight']\
+#     .transform(lambda x: x.fillna(np.mean(x)))
 
 # Bir dataframei groupladigimizda istedigimiz kolonuun minimum olan satirini bu sekilde cagirabiliriz.
 # Bunun avantaji diger kolonlarin depsi sadece bu grupladigimizdan sonraki sectigimiz kolonuun minimum olan satirini secer
